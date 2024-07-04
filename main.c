@@ -272,7 +272,7 @@ void User_vessels_print(User_t *user){
 	for(u32 i = 1; i < user->vessels.size; i++){
 		Vessel_t *vessel = User_vessels_get(user, i);
 		u8 *name = InternPool_get(user->pool, vessel->name);
-		printf("Vessel %d: %s\n", i, name);
+		printf("Vessel id=%d, name=\"%s\"\n", i, name);
 	}
 }
 
@@ -309,12 +309,187 @@ User_t User_deserialize(u8 *file){
 }
 
 
+// commands for repl
+// "@exit" -> either goes back to main menu, or exits the program
+// "ctrl-c" -> exits the program
+// "help" -> prints the help menu (this)
+// "list" -> prints the vessels
+// "select <vessel_id>" -> selects the vessel
+// "add <front> <back>" -> adds a fragment to the selected vessel
+// "remove <fragment_id>" -> removes a fragment from the selected vessel
+// "study" -> starts the study session (shows you the front of the fragments (if they are TypeInAnswer) and then you have to answer the back, then it shows what the back is and what you wrote) when there are no more fragments, it will exit back to the main menu (if you type @exit then it will exit back to the main menu)
+// "fragments" -> prints the fragments for the selected vessel
+void User_REPL(User_t *user){
+	u32 vessel_id = 0;
+	bool running = true;
+	printf("Commands:\n");
+	printf("\n@exit -> either goes back to main menu, or exits the program\n");
+	printf("\nctrl-c -> exits the program\n");
+	printf("\nhelp -> prints the help menu (this)\n");
+	printf("\nlist -> prints the vessels\n");
+	printf("\nselect <vessel_id> -> selects the vessel\n");
+	printf("\nadd <front> <back> -> adds a fragment to the selected vessel\n");
+	printf("\nremove <fragment_id> -> removes a fragment from the selected vessel\n");
+	printf("\nstudy -> starts the study session (shows you the front of the fragments (if they are TypeInAnswer) and then you have to answer the back, then it shows what the back is and what you wrote) when there are no more fragments, it will exit back to the main menu (if you type @exit then it will exit back to the main menu)\n");
+	printf("\nfragments -> prints the fragments for the selected vessel\n");
+	while(running){
+		printf(">");
+		char command[256] = {0};
+		char first_word[256] = {0};
+		bool first_word_done = false;
+		for(u32 i = 0; i < 256; i++){
+			command[i] = getchar();
+			if(!first_word_done && command[i] != ' '){
+				first_word[i] = command[i];
+			} else if (!first_word_done && command[i] == ' '){
+				first_word_done = true;
+				first_word[i] = 0;
+			}
+			if(command[i] == '\n'){
+				command[i] = 0;
+				first_word[i] = 0;
+				break;
+			}
+		}
+		// ansi code to clear screen
+		printf("\033[H\033[J");
+		// ansi code to move cursor to top left
+
+		if(strcmp(first_word, "@exit") == 0){
+			running = false;
+		}else if(strcmp(first_word, "help") == 0){
+			printf("Commands:\n");
+			printf("\n@exit -> either goes back to main menu, or exits the program\n");
+			printf("\nctrl-c -> exits the program\n");
+			printf("\nhelp -> prints the help menu (this)\n");
+			printf("\nlist -> prints the vessels\n");
+			printf("\nselect <vessel_id> -> selects the vessel\n");
+			printf("\nadd <front> <back> -> adds a fragment to the selected vessel\n");
+			printf("\nremove <fragment_id> -> removes a fragment from the selected vessel\n");
+			printf("\nstudy -> starts the study session (shows you the front of the fragments (if they are TypeInAnswer) and then you have to answer the back, then it shows what the back is and what you wrote) when there are no more fragments, it will exit back to the main menu (if you type @exit then it will exit back to the main menu)\n");
+			printf("\nfragments -> prints the fragments for the selected vessel\n");
+		}else if(strcmp(first_word, "list") == 0){
+			User_vessels_print(user);
+		}else if(strcmp(first_word, "select") == 0){
+			// get the vessel id from the command
+			sscanf(command, "select %d", &vessel_id);
+			if(vessel_id >= user->vessels.size){
+				printf("Vessel id is out of bounds\n");
+				vessel_id = 0;
+			}
+		}else if(strcmp(first_word, "add") == 0){
+			if(vessel_id == 0){
+				printf("No vessel selected\n");
+			}else{
+				printf("Front: ");
+				u8 front[256] = {0};
+				u8 back[256] = {0};
+				for(u32 i = 0; i < 256; i++) {
+					front[i] = getchar();
+					if(front[i] == '\n'){
+						front[i] = 0;
+						break;
+					}
+				}
+				printf("Back: ");
+				for(u32 i = 0; i < 256; i++) {
+					back[i] = getchar();
+					if(back[i] == '\n'){
+						back[i] = 0;
+						break;
+					}
+				}
+				User_fragments_add_type_in_answer(user, vessel_id, InternPool_intern(user->pool, front, strlen(front)), InternPool_intern(user->pool, back, strlen(back)));
+			}
+		}else if(strcmp(first_word, "remove") == 0){
+			if(vessel_id == 0){
+				printf("No vessel selected\n");
+			}else{
+				u32 fragment_id;
+				sscanf(command, "remove %d", &fragment_id);
+				Vessel_t *vessel = User_vessels_get(user, vessel_id);
+				if(fragment_id >= vessel->fragment_ids.size){
+					printf("Fragment id is out of bounds\n");
+				}else{
+					u32 *fragment_ids = (u32 *)vessel->fragment_ids.data;
+					for(u32 i = fragment_id; i < vessel->fragment_ids.size - 1; i++){
+						fragment_ids[i] = fragment_ids[i + 1];
+					}
+					vessel->fragment_ids.size--;
+				}
+			}
+		} else if(strcmp(first_word, "study") == 0){
+			if(vessel_id == 0){
+			printf("No vessel selected\n");
+			}else{
+			Vessel_t *vessel = User_vessels_get(user, vessel_id);
+				for(u32 i = 0; i < vessel->fragment_ids.size; i++){
+					printf("\033[H\033[J");
+					u32 *fragment_ids = (u32 *)vessel->fragment_ids.data;
+					Fragment_t *fragment = (Fragment_t *)user->fragments.data + fragment_ids[i];
+					u8 *front;
+					u8 *back;
+					switch(fragment->kind){
+						case FRAGMENT_TYPE_IN_ANSWER:
+							front = InternPool_get(user->pool, fragment->data.type_in_answer.front);
+							back = InternPool_get(user->pool, fragment->data.type_in_answer.back);
+							printf("%s\n", front);
+							// ansi code to get width of terminal
+							for(u32 i = 0; i < fragment->data.type_in_answer.front.len; i++){
+								printf("-");
+							}
+							printf("\n");
+							u8 answer[256] = {0};
+							for(u32 i = 0; i < 256; i++){
+								answer[i] = getchar();
+								if(answer[i] == '\n'){
+									answer[i] = 0;
+									break;
+								}
+							}
+							printf("%s\n", back);
+							if(i < vessel->fragment_ids.size - 1)
+								printf("Press enter to continue\n");
+						break;
+						default:
+						printf("Fragment %d: Unknown\n", i);
+						break;
+					}
+				}
+			}
+		} 
+		else if(strcmp(first_word, "fragments") == 0){
+			if(vessel_id == 0){
+				printf("No vessel selected\n");
+			}else{
+				Vessel_t *vessel = User_vessels_get(user, vessel_id);
+				for(u32 i = 0; i < vessel->fragment_ids.size; i++){
+					u32 *fragment_ids = (u32 *)vessel->fragment_ids.data;
+					Fragment_t *fragment = (Fragment_t *)user->fragments.data + fragment_ids[i];
+					u8 *front;
+					u8 *back;
+					switch(fragment->kind){
+						case FRAGMENT_TYPE_IN_ANSWER:
+							front = InternPool_get(user->pool, fragment->data.type_in_answer.front);
+							back = InternPool_get(user->pool, fragment->data.type_in_answer.back);
+							printf("Fragment id=%d Type In Answer: %s -> %s\n", i, front, back);
+						break;
+						default:
+						printf("Fragment %d: Unknown\n", i);
+						break;
+					}
+				}
+			}
+		} else {
+			printf("Unknown command: \"%s\" %s \n", command, first_word);
+		}
+	}
+			
+}
 
 
 
-
-
-int main(void){
+int main(int argc, char **argv){
 	// InternPool_t * pool = InternPool_new();
 	// StrId hello = InternPool_intern(pool, "Hello", 5);
 	// StrId world = InternPool_intern(pool, "World", 5);
@@ -339,22 +514,25 @@ int main(void){
 	// printf("%s\n", str);
 	//
 		
-	User_t user = User_new();
+	// load the user from a file, if none are provided then create a new user
+	if(argc > 1){
+		User_t new_user = User_deserialize(argv[1]);
+		User_REPL(&new_user);
+	} else {
+		printf("No user file provided\n");
+		printf("Creating new user \"user.bin\", with some basic sets\n");
+		printf("To load a user from a file, provide the file as the first argument\n");
+		printf("Like so: %s user.bin\n", argv[0]);
+		User_t new_user = User_new();
+		User_vessels_add(&new_user, InternPool_intern(new_user.pool, "Programming Culture", 19));
+		User_fragments_add_type_in_answer(&new_user, 1, InternPool_intern(new_user.pool, "What tends to come after \"Hello\"?", 33), InternPool_intern(new_user.pool, "World", 5));
+		printf("User created\n");
+		printf("Press enter to start\n");
+		while(getchar() != '\n');
+		User_REPL(&new_user);
+		User_serialize(&new_user, "user.bin");
+	}
 
-	User_vessels_add(&user, InternPool_intern(user.pool, "Vessel 1", 8));
-	User_vessels_add(&user, InternPool_intern(user.pool, "Vessel 2", 8));
-
-	User_fragments_add_type_in_answer(&user, 1, InternPool_intern(user.pool, "Front 1", 7), InternPool_intern(user.pool, "Back 1", 6));
-	User_fragments_add_type_in_answer(&user, 1, InternPool_intern(user.pool, "Front 2", 7), InternPool_intern(user.pool, "Back 2", 6));
-
-	User_vessels_print(&user);
-	User_fragments_print(&user);
-
-	User_serialize(&user, "user.bin");
-
-	User_t new_user = User_deserialize("user.bin");
-
-	User_vessels_print(&new_user);
 
 	
 
