@@ -25,7 +25,6 @@
 
 typedef uint32_t u32;
 typedef unsigned char u8;
-typedef uint32_t StrId;
 
 
 
@@ -51,6 +50,7 @@ typedef struct{
 	u32 start;
 	u32 len;
 }InternPoolString_t;
+typedef InternPoolString_t StrId;
 
 // a hashmap, from hashed string, to InternPoolStrings
 typedef struct {
@@ -68,11 +68,9 @@ void InternPool_resize(InternPool_t *pool);
 
 StrId InternPool_intern(InternPool_t *pool, u8 *data, u32 len);
 
-StrId InternPool_contains(InternPool_t *pool, u8 *data, u32 len);
+bool InternPool_contains(InternPool_t *pool, u8 *data, u32 len);
 
-InternPoolString_t InternPool_get(InternPool_t *pool, StrId id);
-
-u8 *InternPool_get_string(InternPool_t *pool, StrId id);
+u8 *InternPool_get(InternPool_t *pool, StrId id);
 
 void InternPool_free(InternPool_t *pool);
 

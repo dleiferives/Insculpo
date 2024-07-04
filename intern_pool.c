@@ -1,13 +1,10 @@
 #include "intern_pool.h"
-u8 *InternPool_get_string(InternPool_t *pool, StrId id) {
-	return pool->arena->data + pool->strings[id].start;
+
+u8 *InternPool_get(InternPool_t *pool, StrId id) {
+  return &pool->arena->data[id.start];
 }
 
-InternPoolString_t InternPool_get(InternPool_t *pool, StrId id) {
-  return pool->strings[id];
-}
-
-StrId InternPool_contains(InternPool_t *pool, u8 *data, u32 len) {
+bool InternPool_contains(InternPool_t *pool, u8 *data, u32 len) {
   u32 hash = InternPool_hash_string(data, len);
   u32 index = hash % pool->capacity;
   while (pool->strings[index].start != 0) {
@@ -15,7 +12,7 @@ StrId InternPool_contains(InternPool_t *pool, u8 *data, u32 len) {
       int equal =
           memcmp(data, pool->arena->data + pool->strings[index].start, len);
       if (equal == 0) {
-        return index;
+        return pool->strings[index].start;
       }
     }
     index = (index + 1) % pool->capacity;
@@ -24,6 +21,9 @@ StrId InternPool_contains(InternPool_t *pool, u8 *data, u32 len) {
 }
 
 StrId InternPool_intern(InternPool_t *pool, u8 *data, u32 len) {
+  while (pool->size > pool->capacity / 3) {
+    InternPool_resize(pool);
+  }
   u32 hash = InternPool_hash_string(data, len);
   u32 index = hash % pool->capacity;
   while (pool->strings[index].start != 0) {
@@ -31,7 +31,7 @@ StrId InternPool_intern(InternPool_t *pool, u8 *data, u32 len) {
       int equal =
           memcmp(data, pool->arena->data + pool->strings[index].start, len);
       if (equal == 0) {
-        return index;
+        return pool->strings[index];
       }
     }
     index = (index + 1) % pool->capacity;
@@ -40,10 +40,7 @@ StrId InternPool_intern(InternPool_t *pool, u8 *data, u32 len) {
   pool->strings[index].len = len;
   StringArena_add(pool->arena, data, len);
   pool->size++;
-  while (pool->size > pool->capacity / 3) {
-    InternPool_resize(pool);
-  }
-  return index;
+  return pool->strings[index];
 }
 
 void InternPool_resize(InternPool_t *pool) {
